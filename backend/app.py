@@ -1,20 +1,16 @@
 """
-Predictive Health Risk Analysis — Flask Backend v3.0
-✅ MySQL persistence — all data saved to database
-✅ No hardcoded sample data — only real user-submitted data
-✅ Syncs from MySQL on startup — survives server restarts
-✅ 5 ML models: diabetes, heart_disease, hypertension, stroke, obesity
-✅ Auto-trains models if .pkl files not found
-✅ Full REST API with CORS
-✅ Serves frontend from /frontend folder
+Predictive Health Risk Analysis — Flask Backend v4.0
+✅ NO DATABASE REQUIRED — fully in-memory
+✅ Works on Render without any cloud MySQL
+✅ 5 ML models auto-trained on startup
+✅ All features work: register patients, assess, dashboard
+✅ Data resets on server restart (free tier limitation)
 """
 
 import os
 import json
 import numpy as np
 import joblib
-import mysql.connector
-from mysql.connector import Error
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from sklearn.ensemble import GradientBoostingClassifier
@@ -24,72 +20,33 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ─────────────────────────────────────────────────────────────
-# APP SETUP
+# PATHS
 # ─────────────────────────────────────────────────────────────
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, '..', 'ml_models')
+BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
+MODEL_DIR    = os.path.join(BASE_DIR, '..', 'ml_models')
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
+# ─────────────────────────────────────────────────────────────
+# FLASK APP
+# ─────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
 
 DISEASES = ['diabetes', 'heart_disease', 'hypertension', 'stroke', 'obesity']
 MODELS   = {}
 
 # ─────────────────────────────────────────────────────────────
-# MYSQL CONFIGURATION  ← update password here
-# ─────────────────────────────────────────────────────────────
-DB_CONFIG = {
-    'host':     os.environ.get('DB_HOST',     'localhost'),
-    'user':     os.environ.get('DB_USER',     'root'),
-    'password': os.environ.get('DB_PASSWORD', ''),
-    'database': os.environ.get('DB_NAME',     'health_risk_db'),
-    'port':     int(os.environ.get('DB_PORT',  3306)),
-}
-
-def get_db():
-    try:
-        return mysql.connector.connect(**DB_CONFIG)
-    except Error as e:
-        print(f"  [DB ERROR] {e}")
-        return None
-
-# ─────────────────────────────────────────────────────────────
-# IN-MEMORY CACHE  (loaded from MySQL on startup)
+# IN-MEMORY STORAGE  (no database needed)
 # ─────────────────────────────────────────────────────────────
 patients_db        = {}   # { patient_id: dict }
 assessments_db     = []   # [ dict, ... ]
 assessment_counter = [1]
 
-def sync_from_db():
-    """Pull existing rows from MySQL into the in-memory cache on startup."""
-    conn = get_db()
-    if not conn:
-        print("  [WARN] Cannot connect to DB — starting with empty cache.")
-        return
-    try:
-        cur = conn.cursor(dictionary=True)
-
-        cur.execute("SELECT * FROM patients ORDER BY created_at ASC")
-        for row in cur.fetchall():
-            # serialize any datetime objects
-            row = {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in row.items()}
-            patients_db[row['patient_id']] = row
-        print(f"  Synced {len(patients_db)} patient(s) from DB")
-
-        cur.execute("SELECT * FROM risk_predictions ORDER BY prediction_date ASC")
-        rows = cur.fetchall()
-        for row in rows:
-            row = {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in row.items()}
-            assessments_db.append(row)
-            assessment_counter[0] = max(assessment_counter[0], int(row['id']) + 1)
-        print(f"  Synced {len(assessments_db)} assessment(s) from DB")
-
-    except Error as e:
-        print(f"  [SYNC ERROR] {e}")
-    finally:
-        cur.close()
-        conn.close()
+def next_patient_id():
+    if not patients_db:
+        return 'P001'
+    nums = [int(k[1:]) for k in patients_db.keys() if k[1:].isdigit()]
+    return f"P{str(max(nums) + 1).zfill(3)}"
 
 # ─────────────────────────────────────────────────────────────
 # ML — AUTO-TRAIN IF MODELS MISSING
@@ -117,7 +74,6 @@ def generate_training_data(disease, n=6000):
     X = np.column_stack([age, bmi, bp_sys, bp_dia, glucose, cholest,
                          heart_rate, smoking, alcohol, activity, diet,
                          sleep, stress, fam_diab, fam_heart, fam_hyp, fam_cancer])
-
     risk_map = {
         'diabetes':      0.30*(glucose>126) + 0.20*(bmi>30)     + 0.15*fam_diab    + 0.10*(age>45)      + 0.10*(activity<2) + 0.08*smoking      + 0.07*(diet<2),
         'heart_disease': 0.25*(cholest>240) + 0.20*(bp_sys>140) + 0.15*smoking      + 0.15*fam_heart     + 0.10*(age>50)     + 0.08*(glucose>126) + 0.07*(heart_rate>90),
@@ -129,10 +85,9 @@ def generate_training_data(disease, n=6000):
     y = ((risk_map[disease] + noise).clip(0, 1) > 0.35).astype(int)
     return X, y
 
-
 def train_and_save(disease):
     print(f"  Training: {disease}...")
-    X, y   = generate_training_data(disease)
+    X, y = generate_training_data(disease)
     X_tr, _, y_tr, _ = train_test_split(X, y, test_size=0.2, random_state=42)
     scaler = StandardScaler()
     X_sc   = scaler.fit_transform(X_tr)
@@ -142,7 +97,6 @@ def train_and_save(disease):
     joblib.dump(model,  os.path.join(MODEL_DIR, f'{disease}_model.pkl'))
     joblib.dump(scaler, os.path.join(MODEL_DIR, f'{disease}_scaler.pkl'))
     return model, scaler
-
 
 def load_models():
     for disease in DISEASES:
@@ -268,11 +222,11 @@ def generate_recommendations(data, predictions):
             'text': 'Adopt a Mediterranean diet rich in omega-3. Increase soluble fibre. Re-check lipid panel in 6 weeks.'})
     if stress > 7:
         recs.append({'category': 'Stress Management', 'priority': 'Medium',
-            'text': 'Practice mindfulness-based stress reduction (MBSR). Target 7-9 hours sleep. Consider cognitive behavioural therapy.'})
+            'text': 'Practice mindfulness-based stress reduction. Target 7-9 hours sleep. Consider cognitive behavioural therapy.'})
     if sleep < 6:
         recs.append({'category': 'Sleep Hygiene', 'priority': 'Medium',
             'text': 'Set consistent sleep/wake times. Avoid screens 1 hr before bed. Evaluate for sleep apnea if snoring is present.'})
-    if predictions.get('obesity',       {}).get('probability', 0) > 50:
+    if predictions.get('obesity', {}).get('probability', 0) > 50:
         recs.append({'category': 'Obesity Risk', 'priority': 'High',
             'text': 'Consult a nutritionist for a structured meal plan. Aim for 10,000 steps/day and progressive resistance training.'})
     if not recs:
@@ -310,7 +264,7 @@ def options_handler(_):
     return '', 204
 
 # ─────────────────────────────────────────────────────────────
-# STATIC / FRONTEND
+# FRONTEND
 # ─────────────────────────────────────────────────────────────
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -324,11 +278,11 @@ def serve_frontend(path):
 # ─────────────────────────────────────────────────────────────
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    db_ok = get_db() is not None
     return jsonify({
         'status':            'ok',
-        'version':           '3.0',
-        'db_connected':      db_ok,
+        'version':           '4.0',
+        'db_connected':      False,
+        'storage':           'in-memory',
         'models_loaded':     list(MODELS.keys()),
         'total_patients':    len(patients_db),
         'total_assessments': len(assessments_db),
@@ -340,39 +294,24 @@ def health_check():
 # ─────────────────────────────────────────────────────────────
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
-    conn = get_db()
-    if not conn:
-        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
-    try:
-        cur = conn.cursor(dictionary=True)
-        cur.execute("""
-            SELECT
-                p.*,
-                rp.overall_risk_score,
-                rp.risk_category,
-                rp.prediction_date       AS latest_assessment_date,
-                COUNT(rp2.id)            AS assessment_count
-            FROM patients p
-            LEFT JOIN risk_predictions rp
-                ON p.patient_id = rp.patient_id
-                AND rp.id = (
-                    SELECT MAX(id) FROM risk_predictions
-                    WHERE patient_id = p.patient_id
-                )
-            LEFT JOIN risk_predictions rp2
-                ON p.patient_id = rp2.patient_id
-            GROUP BY p.patient_id
-            ORDER BY p.created_at DESC
-        """)
-        rows = cur.fetchall()
-        patients = [{k: (v.isoformat() if hasattr(v, 'isoformat') else v)
-                     for k, v in row.items()} for row in rows]
-        return jsonify({'success': True, 'data': patients, 'total': len(patients)})
-    except Error as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+    patients = []
+    for p in patients_db.values():
+        entry = dict(p)
+        related = [a for a in assessments_db if a['patient_id'] == p['patient_id']]
+        if related:
+            latest = max(related, key=lambda x: x['assessed_at'])
+            entry['overall_risk_score']    = latest['overall_risk_score']
+            entry['risk_category']         = latest['risk_category']
+            entry['latest_assessment_date']= latest['assessed_at']
+            entry['assessment_count']      = len(related)
+        else:
+            entry['overall_risk_score']    = None
+            entry['risk_category']         = None
+            entry['latest_assessment_date']= None
+            entry['assessment_count']      = 0
+        patients.append(entry)
+    patients.sort(key=lambda x: x['created_at'], reverse=True)
+    return jsonify({'success': True, 'data': patients, 'total': len(patients)})
 
 
 @app.route('/api/patients', methods=['POST'])
@@ -381,108 +320,54 @@ def create_patient():
     if not data.get('name'):
         return jsonify({'success': False, 'message': 'Patient name is required'}), 400
 
-    conn = get_db()
-    if not conn:
-        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
-    try:
-        cur = conn.cursor(dictionary=True)
-
-        # Auto-generate next patient ID
-        cur.execute("SELECT patient_id FROM patients ORDER BY patient_id DESC LIMIT 1")
-        last = cur.fetchone()
-        new_pid = f"P{str(int(last['patient_id'][1:]) + 1).zfill(3)}" if last else 'P001'
-
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        cur.execute("""
-            INSERT INTO patients (patient_id, name, age, gender, email, phone, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (new_pid, data['name'], int(data.get('age', 0)),
-              data.get('gender', 'Unknown'), data.get('email', ''),
-              data.get('phone', ''), now))
-        conn.commit()
-
-        patient = {'patient_id': new_pid, 'name': data['name'],
-                   'age': int(data.get('age', 0)), 'gender': data.get('gender', 'Unknown'),
-                   'email': data.get('email', ''), 'phone': data.get('phone', ''),
-                   'created_at': now}
-        patients_db[new_pid] = patient   # update cache
-
-        return jsonify({'success': True, 'data': patient,
-                        'message': f'Patient {new_pid} registered successfully'})
-    except Error as e:
-        conn.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+    new_pid = next_patient_id()
+    now     = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    patient = {
+        'patient_id': new_pid,
+        'name':       data['name'],
+        'age':        int(data.get('age', 0)),
+        'gender':     data.get('gender', 'Unknown'),
+        'email':      data.get('email', ''),
+        'phone':      data.get('phone', ''),
+        'created_at': now,
+    }
+    patients_db[new_pid] = patient
+    return jsonify({'success': True, 'data': patient,
+                    'message': f'Patient {new_pid} registered successfully'})
 
 
 @app.route('/api/patients/<patient_id>', methods=['GET'])
 def get_patient(patient_id):
-    conn = get_db()
-    if not conn:
-        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
-    try:
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM patients WHERE patient_id = %s", (patient_id,))
-        patient = cur.fetchone()
-        if not patient:
-            return jsonify({'success': False, 'message': 'Patient not found'}), 404
-
-        cur.execute("SELECT * FROM risk_predictions WHERE patient_id = %s ORDER BY prediction_date DESC", (patient_id,))
-        assessments = cur.fetchall()
-
-        def serialize(obj):
-            return {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in obj.items()}
-
-        return jsonify({'success': True, 'data': {
-            **serialize(patient),
-            'assessments':      [serialize(a) for a in assessments],
-            'assessment_count': len(assessments),
-        }})
-    except Error as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+    patient = patients_db.get(patient_id)
+    if not patient:
+        return jsonify({'success': False, 'message': 'Patient not found'}), 404
+    history = sorted(
+        [a for a in assessments_db if a['patient_id'] == patient_id],
+        key=lambda x: x['assessed_at'], reverse=True
+    )
+    return jsonify({'success': True, 'data': {
+        **patient, 'assessments': history, 'assessment_count': len(history)
+    }})
 
 
 @app.route('/api/patients/<patient_id>/history', methods=['GET'])
 def patient_history(patient_id):
-    conn = get_db()
-    if not conn:
-        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
-    try:
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM risk_predictions WHERE patient_id = %s ORDER BY prediction_date ASC", (patient_id,))
-        rows = cur.fetchall()
-        history = [{k: (v.isoformat() if hasattr(v, 'isoformat') else v)
-                    for k, v in row.items()} for row in rows]
-        return jsonify({'success': True, 'data': history, 'total': len(history)})
-    except Error as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+    history = sorted(
+        [a for a in assessments_db if a['patient_id'] == patient_id],
+        key=lambda x: x['assessed_at']
+    )
+    return jsonify({'success': True, 'data': history, 'total': len(history)})
 
 # ─────────────────────────────────────────────────────────────
-# API — CORE ML ASSESSMENT  ← saves to MySQL
+# API — CORE ML ASSESSMENT
 # ─────────────────────────────────────────────────────────────
 @app.route('/api/assess', methods=['POST'])
 def assess_patient():
     data       = request.get_json() or {}
     patient_id = data.get('patient_id')
 
-    # Validate patient exists
-    if patient_id:
-        conn_chk = get_db()
-        if conn_chk:
-            c = conn_chk.cursor(dictionary=True)
-            c.execute("SELECT patient_id FROM patients WHERE patient_id = %s", (patient_id,))
-            if not c.fetchone():
-                c.close(); conn_chk.close()
-                return jsonify({'success': False, 'message': f'Patient {patient_id} not found'}), 404
-            c.close(); conn_chk.close()
+    if patient_id and patient_id not in patients_db:
+        return jsonify({'success': False, 'message': f'Patient {patient_id} not found'}), 404
 
     if not MODELS:
         return jsonify({'success': False, 'message': 'ML models not loaded'}), 503
@@ -497,88 +382,8 @@ def assess_patient():
         alerts       = generate_alerts(predictions, overall)
         now          = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # ── Save to MySQL ──────────────────────────────────────
-        db_id = None
-        conn  = get_db()
-        if conn:
-            try:
-                cur = conn.cursor()
-
-                # 1. health_records
-                cur.execute("""
-                    INSERT INTO health_records (
-                        patient_id, record_date,
-                        blood_pressure_systolic, blood_pressure_diastolic,
-                        heart_rate, bmi, blood_glucose, cholesterol,
-                        smoking_status, alcohol_consumption, physical_activity,
-                        diet_quality, sleep_hours, stress_level,
-                        family_history_diabetes, family_history_heart_disease,
-                        family_history_hypertension, family_history_cancer
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """, (
-                    patient_id or 'GUEST', now,
-                    data.get('blood_pressure_systolic'),
-                    data.get('blood_pressure_diastolic'),
-                    data.get('heart_rate'),
-                    data.get('bmi'),
-                    data.get('blood_glucose'),
-                    data.get('cholesterol'),
-                    '1' if data.get('smoking') else '0',
-                    data.get('alcohol_consumption', 'None'),
-                    data.get('physical_activity', 'Sedentary'),
-                    data.get('diet_quality', 'Fair'),
-                    data.get('sleep_hours'),
-                    data.get('stress_level'),
-                    int(bool(data.get('family_history_diabetes', 0))),
-                    int(bool(data.get('family_history_heart', 0))),
-                    int(bool(data.get('family_history_hypertension', 0))),
-                    int(bool(data.get('family_history_cancer', 0))),
-                ))
-                record_id = cur.lastrowid
-
-                # 2. risk_predictions
-                cur.execute("""
-                    INSERT INTO risk_predictions (
-                        patient_id, record_id,
-                        diabetes_risk, heart_disease_risk,
-                        hypertension_risk, stroke_risk, obesity_risk,
-                        overall_risk_score, risk_category,
-                        recommendations, prediction_date
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """, (
-                    patient_id or 'GUEST', record_id,
-                    predictions['diabetes']['probability'],
-                    predictions['heart_disease']['probability'],
-                    predictions['hypertension']['probability'],
-                    predictions['stroke']['probability'],
-                    predictions['obesity']['probability'],
-                    overall, category,
-                    json.dumps([r['text'] for r in recs]),
-                    now,
-                ))
-                db_id = cur.lastrowid
-
-                # 3. risk_factors
-                for f in risk_factors:
-                    cur.execute("""
-                        INSERT INTO risk_factors
-                            (prediction_id, factor_name, factor_value, impact_level, contribution_percentage)
-                        VALUES (%s,%s,%s,%s,%s)
-                    """, (db_id, f['name'], f['value'], f['level'], f['impact']))
-
-                conn.commit()
-                print(f"  [DB] Saved — patient={patient_id or 'GUEST'}, assessment_id={db_id}")
-
-            except Error as e:
-                conn.rollback()
-                print(f"  [DB WARN] Save failed: {e}")
-            finally:
-                cur.close()
-                conn.close()
-        # ──────────────────────────────────────────────────────
-
         assessment = {
-            'id':                       db_id or assessment_counter[0],
+            'id':                       assessment_counter[0],
             'patient_id':               patient_id or 'GUEST',
             'age':                      data.get('age'),
             'gender':                   data.get('gender'),
@@ -602,7 +407,6 @@ def assess_patient():
             'alerts':                   alerts,
             'assessed_at':              now,
         }
-
         assessments_db.append(assessment)
         assessment_counter[0] += 1
 
@@ -615,7 +419,6 @@ def assess_patient():
             'recommendations':    recs,
             'alerts':             alerts,
         }})
-
     except Exception as e:
         return jsonify({'success': False, 'message': f'Prediction error: {str(e)}'}), 500
 
@@ -624,131 +427,74 @@ def assess_patient():
 # ─────────────────────────────────────────────────────────────
 @app.route('/api/dashboard/stats', methods=['GET'])
 def dashboard_stats():
-    conn = get_db()
-    if not conn:
-        # Fallback to in-memory
-        risk_dist = {'Low': 0, 'Moderate': 0, 'High': 0, 'Critical': 0}
-        for a in assessments_db:
-            risk_dist[a.get('risk_category', 'Low')] += 1
-        avg = round(sum(a['overall_risk_score'] for a in assessments_db) / max(len(assessments_db), 1), 1)
-        return jsonify({'success': True, 'data': {
-            'total_patients': len(patients_db), 'total_assessments': len(assessments_db),
-            'risk_distribution': risk_dist, 'average_risk_score': avg,
-            'disease_rates': {}, 'recent_assessments': [],
-        }})
-    try:
-        cur = conn.cursor(dictionary=True)
+    risk_dist = {'Low': 0, 'Moderate': 0, 'High': 0, 'Critical': 0}
+    for a in assessments_db:
+        risk_dist[a.get('risk_category', 'Low')] += 1
 
-        cur.execute("SELECT COUNT(*) AS cnt FROM patients")
-        total_patients = cur.fetchone()['cnt']
+    avg_score = round(
+        sum(a['overall_risk_score'] for a in assessments_db) / max(len(assessments_db), 1), 1
+    )
 
-        cur.execute("SELECT COUNT(*) AS cnt FROM risk_predictions")
-        total_assessments = cur.fetchone()['cnt']
+    disease_rates = {}
+    for disease in DISEASES:
+        high = sum(1 for a in assessments_db
+                   if a.get('risk_predictions', {}).get(disease, {}).get('probability', 0) > 50)
+        disease_rates[disease] = round((high / max(len(assessments_db), 1)) * 100, 1)
 
-        cur.execute("SELECT risk_category, COUNT(*) AS cnt FROM risk_predictions GROUP BY risk_category")
-        risk_dist = {'Low': 0, 'Moderate': 0, 'High': 0, 'Critical': 0}
-        for row in cur.fetchall():
-            risk_dist[row['risk_category']] = row['cnt']
+    recent = sorted(assessments_db, key=lambda x: x['assessed_at'], reverse=True)[:5]
+    for r in recent:
+        r['patient_name'] = patients_db.get(r['patient_id'], {}).get('name', 'Guest')
 
-        cur.execute("SELECT AVG(overall_risk_score) AS avg FROM risk_predictions")
-        avg_row = cur.fetchone()['avg']
-        avg_score = round(float(avg_row), 1) if avg_row else 0.0
-
-        cur.execute("""
-            SELECT AVG(diabetes_risk) AS diabetes, AVG(heart_disease_risk) AS heart_disease,
-                   AVG(hypertension_risk) AS hypertension, AVG(stroke_risk) AS stroke,
-                   AVG(obesity_risk) AS obesity
-            FROM risk_predictions
-        """)
-        rates_row = cur.fetchone()
-        disease_rates = {k: round(float(v), 1) if v else 0.0 for k, v in rates_row.items()}
-
-        cur.execute("""
-            SELECT rp.*, p.name AS patient_name
-            FROM risk_predictions rp
-            LEFT JOIN patients p ON rp.patient_id = p.patient_id
-            ORDER BY rp.prediction_date DESC LIMIT 5
-        """)
-        recent = [{k: (v.isoformat() if hasattr(v, 'isoformat') else v)
-                   for k, v in row.items()} for row in cur.fetchall()]
-
-        return jsonify({'success': True, 'data': {
-            'total_patients':     total_patients,
-            'total_assessments':  total_assessments,
-            'risk_distribution':  risk_dist,
-            'average_risk_score': avg_score,
-            'disease_rates':      disease_rates,
-            'recent_assessments': recent,
-        }})
-    except Error as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+    return jsonify({'success': True, 'data': {
+        'total_patients':     len(patients_db),
+        'total_assessments':  len(assessments_db),
+        'risk_distribution':  risk_dist,
+        'average_risk_score': avg_score,
+        'disease_rates':      disease_rates,
+        'recent_assessments': recent,
+    }})
 
 # ─────────────────────────────────────────────────────────────
 # API — POPULATION ANALYTICS
 # ─────────────────────────────────────────────────────────────
 @app.route('/api/analytics/population', methods=['GET'])
 def population_analytics():
-    conn = get_db()
-    if not conn:
-        return jsonify({'success': True, 'data': {'by_age': [], 'by_gender': []}})
-    try:
-        cur = conn.cursor(dictionary=True)
+    age_groups    = {'18-29': [], '30-44': [], '45-59': [], '60+': []}
+    gender_groups = {}
 
-        cur.execute("""
-            SELECT
-                CASE
-                    WHEN p.age < 30 THEN '18-29'
-                    WHEN p.age < 45 THEN '30-44'
-                    WHEN p.age < 60 THEN '45-59'
-                    ELSE '60+'
-                END AS age_group,
-                AVG(rp.overall_risk_score) AS avg_risk,
-                COUNT(*) AS cnt
-            FROM risk_predictions rp
-            JOIN patients p ON rp.patient_id = p.patient_id
-            GROUP BY age_group
-        """)
-        by_age = [{'age_group': r['age_group'],
-                   'avg_risk':  round(float(r['avg_risk']), 1),
-                   'count':     r['cnt']} for r in cur.fetchall()]
+    for a in assessments_db:
+        age   = int(a.get('age') or 0)
+        score = a.get('overall_risk_score', 0)
+        if   age < 30: age_groups['18-29'].append(score)
+        elif age < 45: age_groups['30-44'].append(score)
+        elif age < 60: age_groups['45-59'].append(score)
+        else:          age_groups['60+'].append(score)
 
-        cur.execute("""
-            SELECT p.gender,
-                   AVG(rp.overall_risk_score) AS avg_risk,
-                   COUNT(*) AS cnt
-            FROM risk_predictions rp
-            JOIN patients p ON rp.patient_id = p.patient_id
-            GROUP BY p.gender
-        """)
-        by_gender = [{'gender':   r['gender'],
-                      'avg_risk': round(float(r['avg_risk']), 1),
-                      'count':    r['cnt']} for r in cur.fetchall()]
+        gender = a.get('gender', 'Unknown')
+        gender_groups.setdefault(gender, []).append(score)
 
-        return jsonify({'success': True, 'data': {'by_age': by_age, 'by_gender': by_gender}})
-    except Error as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+    by_age = [{'age_group': g,
+               'avg_risk':  round(sum(v)/len(v), 1) if v else 0,
+               'count':     len(v)} for g, v in age_groups.items()]
+    by_gender = [{'gender':   g,
+                  'avg_risk': round(sum(v)/len(v), 1) if v else 0,
+                  'count':    len(v)} for g, v in gender_groups.items()]
+
+    return jsonify({'success': True, 'data': {'by_age': by_age, 'by_gender': by_gender}})
 
 # ─────────────────────────────────────────────────────────────
-# ENTRY POINT
+# STARTUP — runs under gunicorn AND python directly
 # ─────────────────────────────────────────────────────────────
-# ── Startup — runs under gunicorn AND python directly ──────
 print("=" * 55)
-print("  Predictive Health Risk Analysis  v3.1")
+print("  Predictive Health Risk Analysis  v4.0")
+print("  Mode: In-Memory (no database)")
 print("=" * 55)
 print("\n[1] Loading ML models...")
 load_models()
 print(f"    Ready: {list(MODELS.keys())}")
-print("\n[2] Syncing from MySQL...")
-sync_from_db()
-print("\n[3] App ready.")
+print("\n[2] App ready — no database needed.\n")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f"    Running locally at http://localhost:{port}\n")
+    print(f"    Running at http://localhost:{port}\n")
     app.run(debug=False, host='0.0.0.0', port=port)
