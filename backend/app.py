@@ -30,7 +30,8 @@ BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, '..', 'ml_models')
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-app = Flask(__name__, static_folder=os.path.join(BASE_DIR, '..', 'frontend'), static_url_path='')
+FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
 
 DISEASES = ['diabetes', 'heart_disease', 'hypertension', 'stroke', 'obesity']
 MODELS   = {}
@@ -39,11 +40,11 @@ MODELS   = {}
 # MYSQL CONFIGURATION  ← update password here
 # ─────────────────────────────────────────────────────────────
 DB_CONFIG = {
-    'host':     'localhost',
-    'user':     'root',
-    'password': 'root@123',           # ← your MySQL password
-    'database': 'health_risk_db',
-    'port':     3306,
+    'host':     os.environ.get('DB_HOST',     'localhost'),
+    'user':     os.environ.get('DB_USER',     'root'),
+    'password': os.environ.get('DB_PASSWORD', ''),
+    'database': os.environ.get('DB_NAME',     'health_risk_db'),
+    'port':     int(os.environ.get('DB_PORT',  3306)),
 }
 
 def get_db():
@@ -314,10 +315,9 @@ def options_handler(_):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
-    frontend_dir = os.path.join(BASE_DIR, '..', 'frontend')
-    if path and os.path.exists(os.path.join(frontend_dir, path)):
-        return send_from_directory(frontend_dir, path)
-    return send_from_directory(frontend_dir, 'index.html')
+    if path and os.path.exists(os.path.join(FRONTEND_DIR, path)):
+        return send_from_directory(FRONTEND_DIR, path)
+    return send_from_directory(FRONTEND_DIR, 'index.html')
 
 # ─────────────────────────────────────────────────────────────
 # API — HEALTH CHECK
@@ -737,18 +737,18 @@ def population_analytics():
 # ─────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────
+# ── Startup — runs under gunicorn AND python directly ──────
+print("=" * 55)
+print("  Predictive Health Risk Analysis  v3.1")
+print("=" * 55)
+print("\n[1] Loading ML models...")
+load_models()
+print(f"    Ready: {list(MODELS.keys())}")
+print("\n[2] Syncing from MySQL...")
+sync_from_db()
+print("\n[3] App ready.")
+
 if __name__ == '__main__':
-    print("=" * 55)
-    print("  Predictive Health Risk Analysis  v3.0")
-    print("=" * 55)
-
-    print("\n[1] Loading ML models...")
-    load_models()
-    print(f"    Ready: {list(MODELS.keys())}")
-
-    print("\n[2] Connecting to MySQL & syncing data...")
-    sync_from_db()
-
-    print("\n[3] Server  →  http://localhost:5000")
-    print("    Ctrl+C to stop\n")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    print(f"    Running locally at http://localhost:{port}\n")
+    app.run(debug=False, host='0.0.0.0', port=port)
