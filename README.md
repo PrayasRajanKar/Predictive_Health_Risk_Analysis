@@ -97,14 +97,13 @@ Includes patient health parameters such as:
 ---
 
 ## 🤝 Contribution
-Contributions are welcome.
-
+Prayas Ranjan Kar
+Ayush Mohapatra
 ---
 
 ## 📜 License
-MIT License
-
+Licensed by MIT
 ---
 
 ## 👨‍💻 Author
-Your Name
+Prayas Ranjan Kar
