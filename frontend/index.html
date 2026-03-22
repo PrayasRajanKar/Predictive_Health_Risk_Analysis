@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HealthGuard AI — Predictive Risk Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+
+<!-- ─── Sidebar ──────────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 40 40" fill="none">
+        <rect width="40" height="40" rx="10" fill="url(#logoGrad)"/>
+        <path d="M20 8v24M8 20h24" stroke="white" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="20" cy="20" r="5" fill="white" opacity="0.3"/>
+        <defs><linearGradient id="logoGrad" x1="0" y1="0" x2="40" y2="40"><stop stop-color="#00f5a0"/><stop offset="1" stop-color="#00d9f5"/></linearGradient></defs>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-name">HealthGuard</div>
+      <div class="logo-sub">AI Risk Analysis</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" fill="currentColor"/><rect x="14" y="3" width="7" height="7" rx="1" fill="currentColor"/><rect x="3" y="14" width="7" height="7" rx="1" fill="currentColor"/><rect x="14" y="14" width="7" height="7" rx="1" fill="currentColor"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a class="nav-item" data-page="assess" onclick="showPage('assess')">
+      <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.35 0 2.63.3 3.77.83" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      <span>Risk Assessment</span>
+    </a>
+    <a class="nav-item" data-page="patients" onclick="showPage('patients')">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="19" cy="7" r="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M23 21v-1a2 2 0 00-2-2h-1" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      <span>Patients</span>
+    </a>
+    <a class="nav-item" data-page="register" onclick="showPage('register')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Register Patient</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="model-badge">
+      <span class="badge-dot"></span>
+      <span>5 ML Models Active</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── Main Content ──────────────────────────────────────────────────────────── -->
+<main class="main-content">
+
+  <!-- DASHBOARD PAGE -->
+  <div id="page-dashboard" class="page active">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Health Analytics Dashboard</h1>
+        <p class="page-subtitle">Real-time population risk monitoring</p>
+      </div>
+      <div class="header-actions">
+        <span id="dash-date" class="date-badge"></span>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon cyan"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></div>
+        <div class="stat-info"><div class="stat-value" id="stat-patients">—</div><div class="stat-label">Total Patients</div></div>
+        <div class="stat-trend up">+12% ↑</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green"><svg viewBox="0 0 24 24"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+        <div class="stat-info"><div class="stat-value" id="stat-assessments">—</div><div class="stat-label">Assessments Done</div></div>
+        <div class="stat-trend up">+8% ↑</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 9v4M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div class="stat-info"><div class="stat-value" id="stat-high-risk">—</div><div class="stat-label">High Risk Cases</div></div>
+        <div class="stat-trend down">-3% ↓</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></div>
+        <div class="stat-info"><div class="stat-value" id="stat-avg-risk">—%</div><div class="stat-label">Avg Risk Score</div></div>
+        <div class="stat-trend up">+2% ↑</div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="card">
+        <div class="card-header"><h3>Risk Distribution</h3></div>
+        <div class="risk-bars" id="risk-bars">
+          <div class="risk-bar-row">
+            <span class="risk-label low">Low</span>
+            <div class="risk-bar-track"><div class="risk-bar-fill low" style="width:0%" id="bar-low"></div></div>
+            <span class="risk-count" id="count-low">0</span>
+          </div>
+          <div class="risk-bar-row">
+            <span class="risk-label moderate">Moderate</span>
+            <div class="risk-bar-track"><div class="risk-bar-fill moderate" style="width:0%" id="bar-moderate"></div></div>
+            <span class="risk-count" id="count-moderate">0</span>
+          </div>
+          <div class="risk-bar-row">
+            <span class="risk-label high">High</span>
+            <div class="risk-bar-track"><div class="risk-bar-fill high" style="width:0%" id="bar-high"></div></div>
+            <span class="risk-count" id="count-high">0</span>
+          </div>
+          <div class="risk-bar-row">
+            <span class="risk-label critical">Critical</span>
+            <div class="risk-bar-track"><div class="risk-bar-fill critical" style="width:0%" id="bar-critical"></div></div>
+            <span class="risk-count" id="count-critical">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Disease Risk Rates</h3></div>
+        <div id="disease-rates" class="disease-rates-list">
+          <div class="empty-state">Run assessments to see disease-level analytics</div>
+        </div>
+      </div>
+
+      <div class="card full-width">
+        <div class="card-header"><h3>Recent Assessments</h3></div>
+        <div id="recent-table" class="table-wrapper">
+          <div class="empty-state">No assessments recorded yet. Run your first assessment!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ASSESSMENT PAGE -->
+  <div id="page-assess" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Risk Assessment</h1>
+        <p class="page-subtitle">Enter patient health metrics for ML-powered risk prediction</p>
+      </div>
+    </div>
+
+    <div class="assess-layout">
+      <div class="assess-form-col">
+        <div class="card">
+          <div class="card-header"><h3>Patient & Vitals</h3></div>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>Patient ID <span class="opt">(optional)</span></label>
+              <input type="text" id="f-patient-id" placeholder="e.g. P001 or leave blank for guest">
+            </div>
+            <div class="form-group">
+              <label>Age</label>
+              <input type="number" id="f-age" value="45" min="1" max="120">
+            </div>
+            <div class="form-group">
+              <label>BMI</label>
+              <input type="number" id="f-bmi" value="26.5" step="0.1">
+            </div>
+            <div class="form-group">
+              <label>BP Systolic (mmHg)</label>
+              <input type="number" id="f-bp-sys" value="125" min="70" max="250">
+            </div>
+            <div class="form-group">
+              <label>BP Diastolic (mmHg)</label>
+              <input type="number" id="f-bp-dia" value="82" min="40" max="150">
+            </div>
+            <div class="form-group">
+              <label>Blood Glucose (mg/dL)</label>
+              <input type="number" id="f-glucose" value="95" min="50" max="400">
+            </div>
+            <div class="form-group">
+              <label>Cholesterol (mg/dL)</label>
+              <input type="number" id="f-cholesterol" value="195" min="100" max="400">
+            </div>
+            <div class="form-group">
+              <label>Heart Rate (bpm)</label>
+              <input type="number" id="f-hr" value="74" min="30" max="200">
+            </div>
+            <div class="form-group">
+              <label>Sleep Hours</label>
+              <input type="number" id="f-sleep" value="7" min="2" max="14" step="0.5">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Lifestyle Factors</h3></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Smoker</label>
+              <select id="f-smoking">
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Alcohol Consumption</label>
+              <select id="f-alcohol">
+                <option value="None">None</option>
+                <option value="Occasional">Occasional</option>
+                <option value="Moderate">Moderate</option>
+                <option value="Heavy">Heavy</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Physical Activity</label>
+              <select id="f-activity">
+                <option value="Sedentary">Sedentary</option>
+                <option value="Light">Light</option>
+                <option value="Moderate" selected>Moderate</option>
+                <option value="Active">Active</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Diet Quality</label>
+              <select id="f-diet">
+                <option value="Poor">Poor</option>
+                <option value="Fair" selected>Fair</option>
+                <option value="Good">Good</option>
+                <option value="Excellent">Excellent</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label>Stress Level: <span id="stress-val">5</span>/10</label>
+              <input type="range" id="f-stress" min="1" max="10" value="5" oninput="document.getElementById('stress-val').textContent=this.value">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Family History</h3></div>
+          <div class="checkbox-grid">
+            <label class="check-item"><input type="checkbox" id="fh-diabetes"><span class="checkmark"></span>Diabetes</label>
+            <label class="check-item"><input type="checkbox" id="fh-heart"><span class="checkmark"></span>Heart Disease</label>
+            <label class="check-item"><input type="checkbox" id="fh-hypertension"><span class="checkmark"></span>Hypertension</label>
+            <label class="check-item"><input type="checkbox" id="fh-cancer"><span class="checkmark"></span>Cancer</label>
+          </div>
+        </div>
+
+        <button class="btn-primary" onclick="runAssessment()">
+          <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" stroke="white" stroke-width="2" fill="none"/><polyline points="22 4 12 14.01 9 11.01" stroke="white" stroke-width="2" fill="none"/></svg>
+          Run AI Risk Assessment
+        </button>
+      </div>
+
+      <!-- Results Panel -->
+      <div class="assess-results-col" id="results-col" style="display:none">
+        <div class="results-header" id="results-risk-header"></div>
+
+        <div class="card">
+          <div class="card-header"><h3>Disease Risk Scores</h3></div>
+          <div id="risk-gauges"></div>
+        </div>
+
+        <div class="card" id="alerts-card" style="display:none">
+          <div class="card-header"><h3>⚠ Risk Alerts</h3></div>
+          <div id="risk-alerts"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Personalized Recommendations</h3></div>
+          <div id="recommendations"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATIENTS PAGE -->
+  <div id="page-patients" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Patient Registry</h1>
+        <p class="page-subtitle">Manage and monitor all patients</p>
+      </div>
+      <button class="btn-secondary" onclick="showPage('register')">+ Add Patient</button>
+    </div>
+    <div class="card">
+      <div id="patients-table-wrapper">
+        <div class="empty-state">Loading patients...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REGISTER PAGE -->
+  <div id="page-register" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Register Patient</h1>
+        <p class="page-subtitle">Add a new patient to the system</p>
+      </div>
+    </div>
+    <div class="card" style="max-width:600px">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Full Name *</label>
+          <input type="text" id="reg-name" placeholder="Patient full name">
+        </div>
+        <div class="form-group">
+          <label>Age *</label>
+          <input type="number" id="reg-age" min="1" max="120" placeholder="Age">
+        </div>
+        <div class="form-group">
+          <label>Gender *</label>
+          <select id="reg-gender">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="email@example.com">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="text" id="reg-phone" placeholder="+91-XXXXXXXXXX">
+        </div>
+      </div>
+      <button class="btn-primary" onclick="registerPatient()">Register Patient</button>
+      <div id="reg-msg" class="reg-msg"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Loading overlay -->
+<div id="loading-overlay" class="loading-overlay" style="display:none">
+  <div class="loader-box">
+    <div class="loader-rings">
+      <div></div><div></div><div></div>
+    </div>
+    <p>Analyzing health data...</p>
+    <p class="loader-sub">5 ML models processing</p>
+  </div>
+</div>
+
+<script src="static/js/app.js"></script>
+</body>
+</html>
